@@ -1,0 +1,26 @@
+library(Seurat)
+library(ggplot2)
+
+smi <- readRDS("comparison/5_smi_so_qcnorm.RDS")
+smi <- FindVariableFeatures(smi, selection.method = "vst", nfeatures = 300)
+smi <- ScaleData(smi)
+smi <- RunPCA(smi)
+smi <- RunUMAP(smi, dims = 1:40)
+smi <- FindNeighbors(smi, dims = 1:20)
+smi <- FindClusters(smi, resolution = 0.7)
+
+pdf('clustering/cosmx5_clustering.pdf')
+ImageDimPlot(smi, group.by = 'Nanostring_snn_res.0.7', axes = FALSE, border.size = NA) + theme(panel.grid = element_blank(), legend.position = "bottom", legend.justification = "center") + scale_y_reverse() + scale_x_reverse()
+dev.off()
+
+xen <- readRDS("comparison/5_xen_so_qcnorm.RDS")
+xen <- FindVariableFeatures(xen, selection.method = "vst", nfeatures = 300)
+xen <- ScaleData(xen)
+xen <- RunPCA(xen)
+xen <- RunUMAP(xen, dims = 1:40)
+xen <- FindNeighbors(xen, dims = 1:20)
+xen <- FindClusters(xen, resolution = 0.7)
+
+pdf('clustering/xenium5_clustering.pdf')
+ImageDimPlot(xen, group.by = 'Xenium_snn_res.0.7', axes = FALSE, border.size = NA) + theme(panel.grid = element_blank(), legend.position = "bottom", legend.justification = "center")
+dev.off()
