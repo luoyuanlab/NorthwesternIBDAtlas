@@ -10,8 +10,7 @@ grepr <- function(pattern, v){
 	return(v[grep(pattern, v)])
 }
 
-library(progressr)
-source("ReadXenium.FIX.R")
+# source("./ReadXenium.FIX.R") # Should be no longer needed with the latest Seurat version
 
 sample_list <- fread("CosMx-vs-Xenium-4.txt")
 
@@ -22,7 +21,7 @@ for (i in 1:nrow(sample_list)) {
 	sample_id <- sample_list$sample_id[i]
 	
 	data_path <- sample_list$xenium_377_with_seg[i]
-	xen <- LoadXenium_FIX(data_path)
+	xen <- LoadXenium(data_path)
 	
 	# Read metadata file
 	md <- fread(file.path(data_path, 'cells.csv.gz'))
@@ -57,7 +56,7 @@ for (i in 1:nrow(sample_list)) {
 	sample_id <- sample_list$sample_id[i]
 	
 	data_path <- sample_list$xenium_377_no_seg[i]
-	xen <- LoadXenium_FIX(data_path)
+	xen <- LoadXenium(data_path)
 	
 	# Read metadata file
 	md <- fread(file.path(data_path, 'cells.csv.gz'))
@@ -92,7 +91,7 @@ for (i in 1:nrow(sample_list)) {
 	sample_id <- sample_list$sample_id[i]
 	
 	data_path <- sample_list$xenium_folder_colon[i]
-	xen <- LoadXenium_FIX(data_path)
+	xen <- LoadXenium(data_path)
 	
 	# Read metadata file
 	md <- fread(file.path(data_path, 'cells.csv.gz'))

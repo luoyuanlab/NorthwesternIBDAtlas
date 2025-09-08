@@ -10,9 +10,6 @@ grepr <- function(pattern, v){
 	return(v[grep(pattern, v)])
 }
 
-library(progressr)
-source("LoadNanostring.FIX.R")
-
 sample_list <- fread("CosMx-vs-Xenium-16.txt")
 
 for (i in 1:nrow(sample_list)) {
@@ -78,7 +75,7 @@ for (i in 1:nrow(sample_list)) {
 	fwrite(tmp_polygon, paste0("tmp2/", flow_cell_name, "-polygons.csv"), sep = ",")
 	tmp_txfile <- tmp_txfile[tmp_txfile$fov <= fov_end & tmp_txfile$fov >= fov_start,]
 	fwrite(tmp_txfile, paste0("tmp2/", flow_cell_name, "_tx_file.csv"), sep = ",")
-	smi <- LoadNanostring.FIX("tmp2", fov = 'smi')
+	smi <- LoadNanostring("tmp2", fov = 'smi')
 	
 	panel$smi$negprobes <- grepr('Negative', rownames(smi))
 	panel$smi$falsecode <- grepr('SystemControl', rownames(smi))

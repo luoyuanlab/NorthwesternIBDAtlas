@@ -10,9 +10,7 @@ grepr <- function(pattern, v){
 	return(v[grep(pattern, v)])
 }
 
-library(progressr)
-source("../1000plex/LoadNanostring.FIX.R")
-source("./ReadXenium.FIX.R")
+# source("./ReadXenium.FIX.R") # Should be no longer needed with the latest Seurat version
 
 sample_list <- fread("CosMx-vs-Xenium-4.txt")
 
@@ -32,7 +30,7 @@ for (i in 1:nrow(sample_list)) {
 	panel$xen$rna <- xen_panel[!(xen_panel %in% panel$xen$negprobes)]
 	
 	# Read Xenium data and metadata file
-	xen <- LoadXenium_FIX(data_path)
+	xen <- LoadXenium(data_path)
 	md <- fread(file.path(data_path, 'cells.csv.gz'))
 	md <- as.data.frame(md)
 	rownames(md) <- md$cell_id
@@ -79,7 +77,7 @@ for (i in 1:nrow(sample_list)) {
 	fwrite(tmp_polygon, paste0("tmp2/", flow_cell_name, "-polygons.csv"), sep = ",")
 	tmp_txfile <- tmp_txfile[tmp_txfile$fov <= fov_end & tmp_txfile$fov >= fov_start,]
 	fwrite(tmp_txfile, paste0("tmp2/", flow_cell_name, "_tx_file.csv"), sep = ",")
-	smi <- LoadNanostring.FIX("tmp2", fov = 'smi')
+	smi <- LoadNanostring("tmp2", fov = 'smi')
 	
 	panel$smi$negprobes <- grepr('Negative', rownames(smi))
 	panel$smi$falsecode <- grepr('SystemControl', rownames(smi))
