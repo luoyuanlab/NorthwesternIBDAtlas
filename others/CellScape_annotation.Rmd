@@ -1,0 +1,208 @@
+---
+title: "CellScape_CosMx_project"
+author: "Cenfu Wei"
+date: "2025-10-16"
+output: html_document
+---
+
+```{r}
+#library(Matrix)
+#library(mclust)
+library(pheatmap)
+library(RColorBrewer)
+library(Seurat)
+library(ggplot2)
+library(ggsci)
+library(data.table)
+library(dplyr)
+
+#options(future.globals.maxSize = 50000*1024^2)
+```
+
+#read in the UC atlas as reference
+```{r}
+#read in reference scRNAseq dataset to label
+sc_imm <- readRDS("/projects/b1042/DulaiLab/Cenfu/SingleCellAtlas/UC/Yiming_UC_atlasSubsets/sc_imm.RDS")
+cell_map_imm <- readRDS("/projects/b1042/DulaiLab/Cenfu/SingleCellAtlas/UC/Yiming_UC_atlasSubsets/cell_map_imm.RDS")
+
+sc_epi <- readRDS("/projects/b1042/DulaiLab/Cenfu/SingleCellAtlas/UC/Yiming_UC_atlasSubsets/sc_epi.RDS")
+cell_map_epi <- readRDS("/projects/b1042/DulaiLab/Cenfu/SingleCellAtlas/UC/Yiming_UC_atlasSubsets/cell_map_epi.RDS")
+
+sc_others <- readRDS("/projects/b1042/DulaiLab/Cenfu/SingleCellAtlas/UC/Yiming_UC_atlasSubsets/sc_others.RDS")
+cell_map_others <- readRDS("/projects/b1042/DulaiLab/Cenfu/SingleCellAtlas/UC/Yiming_UC_atlasSubsets/cell_map_others.RDS")
+gc()
+```
+
+#functino of scaling the protein marker reads
+```{r}
+mm_scale <- function(x) {
+	return((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+#read in the cellscape paired CosMx dataset
+```{r}
+cosmx_294_303 <- readRDS("~/seuratObject_Cos5.1K.I0294ITDF.I0303RSDF.cscape.08.29.25.RDS")
+
+```
+
+#do the paper workflow please note the processed seurat object '3_smi_so_qcnorm.RDS' is provided through figshare, please check the paper
+```{r}
+#the processed seurat object '3_smi_so_qcnorm.RDS' is provided through figshare, please check the paper
+
+i = 3
+
+  #subset by flaged 
+  Idents(cosmx_294_303) <- "qcCellsPassed"
+  smi <- subset(cosmx_294_303, idents = TRUE)
+  #subset by ncount
+  smi <- subset(smi, subset = nCount_RNA > 20)
+  
+  #process the dataset
+  smi <- NormalizeData(smi, normalization.method = "LogNormalize", scale.factor = 10000)
+  smi <- FindVariableFeatures(smi, selection.method = "vst", nfeatures = 300)
+  smi <- ScaleData(smi)
+  smi <- RunPCA(smi)
+  smi <- RunUMAP(smi, dims = 1:40)
+  
+  ### Determine cell category (epithelial, immune, others)
+	smi$Max.PanCK.scaled <- mm_scale(smi@meta.data$Max.PanCK)
+	smi$Max.CD45.scaled <- mm_scale(smi@meta.data$Max.CD45)
+	anchor_value <- max(smi@meta.data$Max.PanCK.scaled[which(abs(smi@meta.data$Max.PanCK - 5000) == min(abs(smi@meta.data$Max.PanCK - 5000)))])
+	smi$PanCK_pos <- smi@meta.data$Max.PanCK > 5000
+	smi$CD45_pos <- smi@meta.data$Max.CD45.scaled > anchor_value
+	smi$category <- ifelse(smi@meta.data$PanCK_pos, "Epithelial", ifelse(smi@meta.data$CD45_pos, "Immune", "Others"))
+
+	
+### Annotate epithelial cells
+	smi_epi <- smi[,smi@meta.data$category == "Epithelial"]
+	anchors <- FindTransferAnchors(reference = sc_epi, query = smi_epi)
+	predictions <- TransferData(anchorset = anchors, refdata = sc_epi$celltype_minor, weight.reduction = "pcaproject")
+	smi_epi$ct_minor <- predictions$predicted.id
+	smi_epi$ct_major <- unname(cell_map_epi[smi_epi@meta.data$ct_minor])
+	meta_epi <- smi_epi@meta.data[,c("cell_id", "ct_minor", "ct_major")]
+	saveRDS(predictions, paste0( i, "_smi_so_norm_Epi_PS_MinorCT.RDS"))
+	
+	
+	### Annotate immune cells
+	smi_imm <- smi[,smi@meta.data$category == "Immune"]
+	anchors <- FindTransferAnchors(reference = sc_imm, query = smi_imm)
+	predictions <- TransferData(anchorset = anchors, refdata = sc_imm$celltype_minor, weight.reduction = "pcaproject")
+	smi_imm$ct_minor <- predictions$predicted.id
+	smi_imm$ct_major <- unname(cell_map_imm[smi_imm@meta.data$ct_minor])
+	meta_imm <- smi_imm@meta.data[,c("cell_id", "ct_minor", "ct_major")]
+	saveRDS(predictions, paste0(i, "_smi_so_norm_Imm_PS_MinorCT.RDS"))
+
+	
+	### Annotate other cells
+	smi_others <- smi[,smi@meta.data$category == "Others"]
+	anchors <- FindTransferAnchors(reference = sc_others, query = smi_others)
+	predictions <- TransferData(anchorset = anchors, refdata = sc_others$celltype_minor, weight.reduction = "pcaproject")
+	smi_others$ct_minor <- predictions$predicted.id
+	smi_others$ct_major <- unname(cell_map_others[smi_others@meta.data$ct_minor])
+	meta_others <- smi_others@meta.data[,c("cell_id", "ct_minor", "ct_major")]
+	saveRDS(predictions, paste0(, i, "_smi_so_norm_other_PS_MinorCT.RDS"))
+
+
+  ### Merge back the stratified cell type annotations
+	meta_new <- rbind(meta_epi, meta_imm, meta_others)
+	meta <- smi@meta.data
+	meta$index <- 1:nrow(meta)
+	meta <- meta[,c("cell_id", "index")]
+	meta <- merge(meta, meta_new, by = "cell_id")
+	meta <- meta[order(meta$index),]
+	smi@meta.data$ct_minor_new <- meta$ct_minor
+	smi@meta.data$ct_major_new <- meta$ct_major
+
+	saveRDS(smi, paste0(, i, "_smi_so_qcnorm.RDS"))
+	gc()
+  
+
+#the processed seurat object '3_smi_so_qcnorm.RDS' is provided through figshare, please check the paper
+```
+
+
+#read in the aligned protein expression information from CellScape data
+```{r}
+#CellScape protein expression, provided through Figshare
+pr.expression <- read.csv("~/cells_protein_expression(in).csv")
+
+#protein phenotype 
+pr.pheno <- read.csv("~/cell_phenotypes(in).csv")
+
+#read in the coresponding CosMx obj
+cosmx.obj <- readRDS("~/3_smi_so_qcnorm.RDS")
+
+#add the phenotype information to the obj
+df <- cosmx.obj@meta.data
+
+df2 <- merge(df, pr.pheno, by.x = "cell_id", by.y = "CosMx_Id", all.x = TRUE)
+
+rownames(df2) <- df2$cell_id
+
+#sort df2 
+df2 <- df2[rownames(cosmx.obj@meta.data), ]#sorting makes the trick
+
+cosmx.obj$CD4.FOXP3. <- df2$CD4.FOXP3.
+cosmx.obj$CD4.FOXP3hi <- df2$CD4.FOXP3hi
+cosmx.obj$CD4.FOXP3low <- df2$CD4.FOXP3low
+
+cosmx.obj$CD4_FOXP3 <- ifelse(cosmx.obj$CD4.FOXP3hi, "CD4+FOXP3 high",
+                              ifelse(cosmx.obj$CD4.FOXP3low, "CD4+FOXP3 low","others"))
+#do DEG test
+Idents(cosmx.obj) <- "CD4_FOXP3"
+
+#a <- FindMarkers(cosmx.obj, ident.1 = "CD4+FOXP3 high", ident.2 = "CD4+FOXP3 low",logfc.threshold = 0)
+#a.MAST <- FindMarkers(cosmx.obj, ident.1 = "CD4+FOXP3 high", ident.2 = "CD4+FOXP3 low",logfc.threshold = 0,  test.use = "MAST")
+#a.negbinom <- FindMarkers(cosmx.obj, ident.1 = "CD4+FOXP3 high", ident.2 = "CD4+FOXP3 low",logfc.threshold = 0,  test.use = "negbinom")
+
+
+#add the CD4 and FOXP3 protein levels
+df <- cosmx.obj@meta.data
+
+df2 <- merge(df, pr.expression, by.x = "cell_id", by.y = "CosMx_Id", all.x = TRUE)
+
+rownames(df2) <- df2$cell_id
+
+#sort df2 
+df2 <- df2[rownames(cosmx.obj@meta.data), ]#sorting makes the trick
+
+cosmx.obj$FOXP3_Pr_levels <- df2$Foxp3
+cosmx.obj$CD4_Pr_levels <- df2$CD4
+
+df<- data.frame(CD4_Pr_levels  = cosmx.obj$CD4_Pr_levels,
+                FOXP3_Pr_levels = cosmx.obj$FOXP3_Pr_levels, 
+                FOXP3_high = cosmx.obj$CD4.FOXP3hi,
+                FOXP3_low = cosmx.obj$CD4.FOXP3low,
+                CD4 = cosmx.obj$CD4.FOXP3.)
+df_1 <- df %>%
+  subset(FOXP3_high == TRUE) #min = 416.5
+df_2 <- df %>%
+  subset(FOXP3_low == TRUE) #min = 106.8 max = 442.9
+df_3 <- df %>%
+  subset(CD4 == TRUE) #CD4 min = 322.9
+
+
+#cosmx.obj$CD4_FOXP3hi_new <- ifelse(cosmx.obj$FOXP3_Pr_levels >= 100 & )
+
+#----------------------
+#re-classify into 3 groups (FOXP3 low - 100-200, FOXP3mid - 201-400, FOXP3high - > 400) 
+#
+cosmx.obj$CD4_FOXP3_level_new <- ifelse(cosmx.obj$CD4_Pr_levels >= 322.9 & 
+                                          cosmx.obj$FOXP3_Pr_levels >=100 & 
+                                          cosmx.obj$FOXP3_Pr_levels < 200,
+                                        "CD4+FOXP3_low",
+                                       ifelse(cosmx.obj$CD4_Pr_levels >= 322.9 & 
+                                                cosmx.obj$FOXP3_Pr_levels >=200 & 
+                                                cosmx.obj$FOXP3_Pr_levels < 400,
+                                              "CD4+FOXP3_mid",
+                                              ifelse(cosmx.obj$CD4_Pr_levels >= 322.9 & 
+                                                       cosmx.obj$FOXP3_Pr_levels >=400, 
+                                                     "CD4+FOXP3_high",
+                                                     "others")))
+
+
+#CD4+FOXP3_high  CD4+FOXP3_low  CD4+FOXP3_mid         others 
+#           189            427            310          36083 
+
+```
