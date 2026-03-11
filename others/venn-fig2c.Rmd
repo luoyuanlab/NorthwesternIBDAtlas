@@ -1,0 +1,44 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-30"
+---
+```{r}
+library(data.table)
+library(Seurat)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(ggsci)
+library(future)
+```
+
+#read in the DGE test out come of inflames CD CosMx 1k unQC, Xenium MT unQC, unQV samples
+```{r}
+#DEG lists can be obtained fron supplemental table 6
+
+cosmx.1k <- fread("~/cosmx_merged_category_DGE.txt")
+
+xen.unQC <- fread("~/xenium_merged_category_DGE.txt")
+
+xen.unQV <- fread("~/xenium_unQVfiltered_merged_category_DGE.txt")
+```
+
+#do the venn diagram of the inflamed illeum CD samples comparison, not FC set  = 1.1
+```{r}
+cosmx.1k_sub <- cosmx.1k %>% filter(cluster == "Ileum, Inflamed CD") %>% filter(abs(avg_log2FC) >= log2(1.1) ) %>% filter(p_val_adj < 0.05)
+xen.unQC_sub <- xen.unQC %>% filter(cluster == "Ileum, Inflamed CD") %>% filter(abs(avg_log2FC) >= log2(1.1) ) %>% filter(p_val_adj < 0.05)
+xen.unQV_sub <- xen.unQV %>% filter(cluster == "Ileum, Inflamed CD") %>% filter(abs(avg_log2FC) >= log2(1.1) ) %>% filter(p_val_adj < 0.05)
+
+library(ggvenn)
+
+a.list <- list(CosMx_1K_noQC = cosmx.1k_sub$gene,
+               Xenium_MT_noQC = xen.unQC_sub$gene,
+               Xenium_MT_noQV = xen.unQV_sub$gene)
+
+ggvenn(a.list, c("CosMx_1K_noQC","Xenium_MT_noQC","Xenium_MT_noQV" ),
+       fill_color = c("lightblue","pink","lightgreen"))
+
+```
+
